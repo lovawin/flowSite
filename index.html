@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>FLOW Mainnet Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
+
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+<!-- HEADER -->
+<header class="bg-white border-b">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    <h1 class="text-xl font-bold">FLOW Bot</h1>
+    <span class="px-3 py-1 text-xs rounded-full bg-red-100 text-red-600 font-semibold">
+      ● MAINNET
+    </span>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+<!-- LEFT -->
+<section class="space-y-8">
+
+  <!-- WARNING -->
+  <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm">
+    ⚠️ <strong>Warning:</strong> This bot executes real Solana transactions.
+    Only proceed if you understand the risk.
+  </div>
+
+  <!-- WALLET -->
+  <div class="bg-white rounded-2xl shadow p-6 space-y-4">
+    <h2 class="font-semibold text-lg">Wallet</h2>
+
+    <button onclick="connectWallet()" class="border px-4 py-2 rounded-lg text-sm">
+      Connect Phantom / Solflare
+    </button>
+
+    <div id="walletInfo" class="hidden text-sm space-y-1">
+      <div>Address: <span id="walletAddress" class="font-mono"></span></div>
+      <div>Balance: <span id="walletBalance"></span> SOL</div>
+    </div>
+
+    <div>
+      <label class="block text-sm font-medium mb-1">
+        OR Enter Private Key (advanced)
+      </label>
+      <textarea id="privateKey" class="w-full h-24 border rounded-lg p-2 font-mono text-xs"
+        placeholder='[12,34,56,...]'></textarea>
+    </div>
+  </div>
+
+  <!-- BOT CONFIG -->
+  <div class="bg-white rounded-2xl shadow p-6 space-y-5">
+    <h2 class="font-semibold text-lg">Bot Configuration</h2>
+
+    <div>
+      <label class="text-sm font-medium">Project Token Mint</label>
+      <input id="tokenMint" class="w-full border rounded-lg px-3 py-2 mt-1"
+        placeholder="SPL token mint address" />
+    </div>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Threshold (SOL) <span id="thresholdVal">0.5</span>
+      </label>
+      <input id="threshold" type="range" min="0.1" max="10" step="0.1" value="0.5" />
+    </div>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Rate Limit (min) <span id="rateVal">60</span>
+      </label>
+      <input id="rateLimit" type="range" min="5" max="180" value="60" />
+    </div>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Slippage (%) <span id="slippageVal">1</span>
+      </label>
+      <input id="slippage" type="range" min="0.1" max="5" step="0.1" value="1" />
+    </div>
+  </div>
+
+</section>
+
+<!-- RIGHT -->
+<section class="space-y-8">
+
+  <!-- ALLOCATION -->
+  <div class="bg-white rounded-2xl shadow p-6 space-y-4">
+    <h2 class="font-semibold text-lg">Allocation (Auto-balanced)</h2>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Buy & Burn <span id="buyBurnVal">50</span>%
+      </label>
+      <input id="buyBurn" type="range" min="0" max="100" value="50" />
+    </div>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Rewards <span id="rewardVal">25</span>%
+      </label>
+      <input id="reward" type="range" min="0" max="100" value="25" />
+    </div>
+
+    <div>
+      <label class="flex justify-between text-sm font-medium">
+        Treasury <span id="treasuryVal">25</span>%
+      </label>
+      <input id="treasury" type="range" min="0" max="100" value="25" />
+    </div>
+
+    <div class="text-xs text-gray-500">Total always equals 100%</div>
+  </div>
+
+  <!-- LOGS -->
+  <div class="bg-white rounded-2xl shadow p-6">
+    <h2 class="font-semibold text-lg mb-2">Live Logs</h2>
+    <div id="logs" class="h-40 overflow-auto bg-gray-100 rounded p-2 font-mono text-xs"></div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="bg-white rounded-2xl shadow p-6 space-y-3">
+    <button onclick="confirmStart()" class="w-full bg-black text-white py-3 rounded-xl">
+      Start Bot
+    </button>
+    <button onclick="confirmStop()" class="w-full border border-red-300 text-red-600 py-3 rounded-xl">
+      Emergency Stop
+    </button>
+  </div>
+
+</section>
+
+</main>
+
+<!-- SCRIPT -->
+<script>
+const bind=(id,val)=>{const e=document.getElementById(id),o=document.getElementById(val);e.oninput=()=>o.textContent=e.value;}
+bind('threshold','thresholdVal');bind('rateLimit','rateVal');bind('slippage','slippageVal');
+bind('buyBurn','buyBurnVal');bind('reward','rewardVal');bind('treasury','treasuryVal');
+
+const sliders=['buyBurn','reward','treasury'];
+sliders.forEach(id=>{
+  document.getElementById(id).oninput=()=>balance(id);
+});
+
+function balance(changed){
+  let total=sliders.reduce((s,i)=>s+ +document.getElementById(i).value,0);
+  if(total===100) return;
+  let diff=total-100;
+  sliders.filter(i=>i!==changed).forEach(i=>{
+    let el=document.getElementById(i);
+    el.value=Math.max(0,el.value-diff/2);
+    document.getElementById(i+'Val').textContent=el.value;
+  });
+}
+
+async function connectWallet(){
+  if(!window.solana) return alert("Wallet not found");
+  const res=await solana.connect();
+  const addr=res.publicKey.toString();
+  walletAddress.textContent=addr;
+  walletInfo.classList.remove('hidden');
+}
+
+function confirmStart(){
+  if(confirm("Start bot on MAINNET?")) startBot();
+}
+function confirmStop(){
+  if(confirm("Emergency stop bot?")) stopBot();
+}
+
+async function startBot(){
+  await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      privateKey:privateKey.value||null,
+      tokenMint:tokenMint.value,
+      threshold:threshold.value,
+      rateLimit:rateLimit.value,
+      slippage:slippage.value,
+      buyBurn:buyBurn.value,
+      reward:reward.value,
+      treasury:treasury.value
+    })});
+}
+
+async function stopBot(){
+  await fetch('/api/stop',{method:'POST'});
+}
+
+setInterval(async()=>{
+  const r=await fetch('/api/status').then(r=>r.json()).catch(()=>null);
+  if(r?.logs){
+    logs.innerHTML=r.logs.slice(-50).map(l=>`<div>${l}</div>`).join('');
+    logs.scrollTop=logs.scrollHeight;
+  }
+},3000);
+</script>
+
+</body>
+</html>
